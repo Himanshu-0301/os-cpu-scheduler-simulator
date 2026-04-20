@@ -1,0 +1,1475 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OS Thread Simulator</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  /* ── RESET & ROOT ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg0: #06080f;
+    --bg1: #0a0d16;
+    --bg2: #0f1320;
+    --bg3: #141929;
+    --bg4: #1a2035;
+    --bg5: #212840;
+    --border: #1e2840;
+    --border2: #2a3550;
+    --border3: #3a4a68;
+
+    --cyan:   #00d4ff;
+    --cyan2:  #00a8cc;
+    --violet: #7b5ea7;
+    --violet2:#9b7df8;
+    --green:  #00e5a0;
+    --green2: #00b87d;
+    --amber:  #ffb800;
+    --amber2: #e09600;
+    --rose:   #ff4070;
+    --rose2:  #cc2f55;
+    --purple: #b06aff;
+    --sky:    #40c4ff;
+
+    --t1: #e8edf5;
+    --t2: #8a9bb8;
+    --t3: #4a5a78;
+    --t4: #262f45;
+
+    --algo-fcfs: #00d4ff;
+    --algo-rr:   #9b7df8;
+    --algo-sjf:  #00e5a0;
+    --algo-pri:  #ffb800;
+
+    --font-mono: 'JetBrains Mono', monospace;
+    --font-ui: 'Syne', sans-serif;
+
+    --radius: 10px;
+    --radius-lg: 16px;
+    --shadow: 0 4px 24px rgba(0,0,0,0.5);
+  }
+
+  html, body {
+    height: 100%;
+    background: var(--bg0);
+    color: var(--t1);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    overflow: hidden;
+  }
+
+  /* ── LAYOUT ── */
+  #app {
+    display: grid;
+    grid-template-rows: 52px 1fr;
+    height: 100vh;
+  }
+
+  /* ── NAV ── */
+  #nav {
+    display: flex;
+    align-items: center;
+    padding: 0 20px;
+    background: var(--bg1);
+    border-bottom: 1px solid var(--border);
+    gap: 0;
+    position: relative;
+    z-index: 100;
+  }
+  .nav-logo {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--cyan);
+    letter-spacing: 0.05em;
+    margin-right: 32px;
+    white-space: nowrap;
+  }
+  .nav-logo span { color: var(--t3); }
+  .nav-tabs { display: flex; gap: 2px; }
+  .nav-tab {
+    padding: 6px 18px;
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--t3);
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.2s;
+    position: relative;
+  }
+  .nav-tab:hover { color: var(--t2); background: var(--bg3); }
+  .nav-tab.active {
+    color: var(--cyan);
+    background: var(--bg3);
+  }
+  .nav-tab.active::after {
+    content: '';
+    position: absolute;
+    bottom: -7px;
+    left: 12px; right: 12px;
+    height: 2px;
+    background: var(--cyan);
+    border-radius: 2px;
+  }
+  .nav-status {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--t3);
+  }
+  .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    background: var(--t4);
+    transition: background 0.3s;
+  }
+  .status-dot.ready { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  .status-dot.running { background: var(--amber); box-shadow: 0 0 6px var(--amber); animation: pulse 1s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+  /* ── CONTENT AREA ── */
+  #content { overflow: hidden; position: relative; }
+  .page {
+    position: absolute;
+    inset: 0;
+    overflow-y: auto;
+    padding: 20px;
+    display: none;
+  }
+  .page.active { display: block; }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 5px; }
+  ::-webkit-scrollbar-track { background: var(--bg1); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+  /* ── UTILITY ── */
+  .card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+  }
+  .card-title {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: var(--t3);
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .card-title::before {
+    content: '';
+    display: block;
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: currentColor;
+  }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+  .grid4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+
+  /* ── BUTTONS ── */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 18px;
+    border-radius: 8px;
+    border: none;
+    font-family: var(--font-ui);
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: all 0.18s;
+  }
+  .btn-primary {
+    background: var(--cyan);
+    color: var(--bg0);
+  }
+  .btn-primary:hover { background: var(--cyan2); transform: translateY(-1px); }
+  .btn-secondary {
+    background: var(--bg4);
+    color: var(--t2);
+    border: 1px solid var(--border2);
+  }
+  .btn-secondary:hover { background: var(--bg5); color: var(--t1); }
+  .btn-danger {
+    background: rgba(255,64,112,0.15);
+    color: var(--rose);
+    border: 1px solid rgba(255,64,112,0.3);
+  }
+  .btn-danger:hover { background: rgba(255,64,112,0.25); }
+  .btn-sm { padding: 5px 11px; font-size: 11px; border-radius: 6px; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+
+  /* ── INPUTS ── */
+  input[type=number], input[type=text], select {
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 7px;
+    color: var(--t1);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 7px 10px;
+    outline: none;
+    width: 100%;
+    transition: border-color 0.2s;
+  }
+  input:focus, select:focus { border-color: var(--cyan); }
+  select { cursor: pointer; }
+  select option { background: var(--bg3); }
+  label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--t3);
+    display: block;
+    margin-bottom: 5px;
+  }
+
+  /* ── METRIC CARDS ── */
+  .metric-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 16px 18px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    transition: border-color 0.2s;
+  }
+  .metric-card:hover { border-color: var(--border2); }
+  .metric-val {
+    font-family: var(--font-mono);
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 1;
+  }
+  .metric-label {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--t3);
+  }
+
+  /* ──────────────────────────────────────
+     PAGE 1: SIMULATE
+  ────────────────────────────────────── */
+  #page-sim {
+    display: none;
+    grid-template-columns: 320px 1fr;
+    grid-template-rows: auto 1fr;
+    gap: 16px;
+    max-height: 100%;
+  }
+  #page-sim.active { display: grid; }
+
+  /* left column */
+  #sim-left {
+    grid-row: 1 / 3;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    overflow-y: auto;
+  }
+
+  /* algo selector */
+  .algo-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .algo-btn {
+    padding: 10px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    color: var(--t2);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.18s;
+  }
+  .algo-btn:hover { border-color: var(--border3); color: var(--t1); }
+  .algo-btn.selected { border-color: var(--cyan); color: var(--cyan); background: rgba(0,212,255,0.06); }
+
+  /* thread table input */
+  #thread-table-wrap { overflow-x: auto; }
+  .thread-input-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .thread-input-table th {
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--t3);
+    text-align: center;
+    padding: 6px 4px;
+    border-bottom: 1px solid var(--border);
+  }
+  .thread-input-table td {
+    padding: 4px 3px;
+    text-align: center;
+  }
+  .thread-input-table td input[type=number] {
+    width: 52px;
+    text-align: center;
+    padding: 5px 4px;
+    font-size: 12px;
+  }
+  .tid-badge {
+    display: inline-block;
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 26px;
+    text-align: center;
+    background: var(--bg4);
+    color: var(--t2);
+  }
+  .remove-thread-btn {
+    width: 22px; height: 22px;
+    background: transparent;
+    border: 1px solid var(--border2);
+    border-radius: 4px;
+    color: var(--t3);
+    font-size: 14px;
+    cursor: pointer;
+    line-height: 1;
+    transition: all 0.15s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .remove-thread-btn:hover { background: rgba(255,64,112,0.15); border-color: var(--rose); color: var(--rose); }
+
+  /* right column - top: metrics */
+  #sim-metrics { grid-column: 2; }
+
+  /* right column - bottom: results */
+  #sim-results { grid-column: 2; overflow: hidden; }
+
+  /* ── GANTT ── */
+  .gantt-wrap {
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  #gantt-canvas-wrap {
+    position: relative;
+    min-height: 80px;
+  }
+  .gantt-svg {
+    display: block;
+    min-width: 100%;
+  }
+
+  /* ── THREAD STATE TABLE ── */
+  .results-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .results-table th {
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--t3);
+    font-weight: 600;
+    text-align: left;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .results-table td {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border);
+    color: var(--t2);
+  }
+  .results-table tr:last-child td { border-bottom: none; }
+  .results-table tr:hover td { background: var(--bg3); }
+  .state-badge {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+  }
+
+  /* ── LOG ── */
+  #log-list {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    max-height: 160px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .log-line {
+    display: flex;
+    gap: 10px;
+    padding: 3px 6px;
+    border-radius: 4px;
+    align-items: baseline;
+  }
+  .log-line:hover { background: var(--bg3); }
+  .log-tick {
+    color: var(--t4);
+    min-width: 34px;
+    text-align: right;
+    font-size: 10px;
+  }
+  .log-msg { color: var(--t2); }
+
+  /* ──────────────────────────────────────
+     PAGE 2: ANALYSIS
+  ────────────────────────────────────── */
+  #page-analysis { }
+  .analysis-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  .chart-container {
+    position: relative;
+    height: 240px;
+  }
+  #gantt-compare-wrap {
+    overflow-x: auto;
+  }
+
+  /* ──────────────────────────────────────
+     PAGE 3: INSIGHTS
+  ────────────────────────────────────── */
+  #page-insights { }
+  .insights-hero {
+    background: linear-gradient(135deg, rgba(0,212,255,0.06) 0%, rgba(155,125,248,0.06) 100%);
+    border: 1px solid var(--border2);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 28px;
+  }
+  .best-algo-badge {
+    flex-shrink: 0;
+    width: 120px; height: 120px;
+    border-radius: 50%;
+    background: conic-gradient(var(--cyan) 0%, rgba(0,212,255,0.1) 60%);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-family: var(--font-mono);
+    position: relative;
+  }
+  .best-algo-badge::before {
+    content: '';
+    position: absolute;
+    inset: 4px;
+    border-radius: 50%;
+    background: var(--bg2);
+  }
+  .best-algo-badge .badge-label {
+    position: relative;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--t3);
+  }
+  .best-algo-badge .badge-name {
+    position: relative;
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--cyan);
+    margin-top: 2px;
+  }
+  .insights-text h2 {
+    font-size: 20px;
+    font-weight: 800;
+    margin-bottom: 8px;
+    color: var(--t1);
+  }
+  .insights-text p { color: var(--t2); font-size: 13px; line-height: 1.7; }
+  .insights-text p b { color: var(--t1); font-weight: 700; }
+  .insight-item {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 18px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    color: var(--t2);
+    line-height: 1.6;
+    border-left: 3px solid var(--border2);
+  }
+  .insight-item b { color: var(--t1); font-weight: 700; }
+  .ranking-table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  .ranking-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--t2);
+  }
+  .ranking-table tr:last-child td { border-bottom: none; }
+  .ranking-table tr:hover td { background: var(--bg3); }
+  .rank-num {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--t4);
+    font-family: var(--font-mono);
+    width: 36px;
+  }
+  .rank-num.gold   { color: #ffd700; }
+  .rank-num.silver { color: #c0c0c0; }
+  .rank-num.bronze { color: #cd7f32; }
+  .rec-box {
+    background: rgba(0,229,160,0.06);
+    border: 1px solid rgba(0,229,160,0.25);
+    border-radius: var(--radius);
+    padding: 16px 20px;
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+  }
+  .rec-icon {
+    font-size: 20px;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .rec-text {
+    font-size: 13px;
+    color: var(--t2);
+    line-height: 1.7;
+  }
+  .rec-text strong { color: var(--green); }
+
+  /* ── ALGO COLOR DOTS ── */
+  .algo-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    margin-right: 6px;
+    flex-shrink: 0;
+  }
+
+  /* ── EMPTY / LOADING STATES ── */
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--t3);
+    font-family: var(--font-mono);
+    font-size: 12px;
+  }
+  .empty-state .icon { font-size: 32px; margin-bottom: 10px; opacity: 0.5; }
+  .spinner {
+    display: inline-block;
+    width: 18px; height: 18px;
+    border: 2px solid var(--border2);
+    border-top-color: var(--cyan);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    border-radius: 10px;
+    padding: 12px 20px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--t1);
+    z-index: 999;
+    transform: translateY(80px);
+    opacity: 0;
+    transition: all 0.3s;
+    max-width: 320px;
+  }
+  #toast.show { transform: translateY(0); opacity: 1; }
+  #toast.error { border-color: var(--rose); color: var(--rose); }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 900px) {
+    #page-sim.active { grid-template-columns: 1fr; grid-template-rows: auto; }
+    #sim-left { grid-row: auto; }
+    #sim-metrics, #sim-results { grid-column: 1; }
+    .grid4 { grid-template-columns: 1fr 1fr; }
+    .analysis-grid { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- NAV -->
+  <nav id="nav">
+    <div class="nav-logo">// <span>OS</span>THREAD<span>SIM</span></div>
+    <div class="nav-tabs">
+      <button class="nav-tab active" onclick="showPage('sim', this)">Simulate</button>
+      <button class="nav-tab" onclick="showPage('analysis', this)">Analysis</button>
+      <button class="nav-tab" onclick="showPage('insights', this)">Insights</button>
+    </div>
+    <div class="nav-status">
+      <div class="status-dot" id="status-dot"></div>
+      <span id="status-text">idle</span>
+    </div>
+  </nav>
+
+  <!-- CONTENT -->
+  <div id="content">
+
+    <!-- ────────── PAGE: SIMULATE ────────── -->
+    <div id="page-sim" class="page active">
+
+      <!-- LEFT COLUMN -->
+      <div id="sim-left">
+
+        <!-- Algorithm Select -->
+        <div class="card">
+          <div class="card-title" style="color:var(--violet2)">Algorithm</div>
+          <div class="algo-grid">
+            <button class="algo-btn selected" data-algo="fcfs" onclick="selectAlgo(this)">FCFS</button>
+            <button class="algo-btn" data-algo="rr" onclick="selectAlgo(this)">Round Robin</button>
+            <button class="algo-btn" data-algo="sjf" onclick="selectAlgo(this)">SJF</button>
+            <button class="algo-btn" data-algo="priority" onclick="selectAlgo(this)">Priority</button>
+          </div>
+          <div id="quantum-row" style="margin-top:12px;display:none;">
+            <label>Time Quantum</label>
+            <input type="number" id="quantum-input" value="2" min="1" max="20" style="width:80px;">
+          </div>
+        </div>
+
+        <!-- Thread Input -->
+        <div class="card">
+          <div class="card-title" style="color:var(--cyan)">Threads
+            <button class="btn btn-secondary btn-sm" onclick="addThread()" style="margin-left:auto">+ Add</button>
+          </div>
+          <div id="thread-table-wrap">
+            <table class="thread-input-table">
+              <thead>
+                <tr>
+                  <th>TID</th><th>Arrival</th><th>Burst</th><th>Priority</th><th></th>
+                </tr>
+              </thead>
+              <tbody id="thread-tbody"></tbody>
+            </table>
+          </div>
+          <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-secondary btn-sm" onclick="loadPreset('default')">📋 Default</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadPreset('stress')">⚡ Stress</button>
+            <button class="btn btn-secondary btn-sm" onclick="loadPreset('priority')">🎯 Priority Demo</button>
+          </div>
+        </div>
+
+        <!-- Run Button -->
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-primary" id="run-btn" onclick="runSimulation()" style="flex:1">
+            ▶ Run Simulation
+          </button>
+          <button class="btn btn-secondary" onclick="clearResults()" title="Clear">✕</button>
+        </div>
+
+      </div><!-- /sim-left -->
+
+      <!-- TOP RIGHT: Metrics -->
+      <div id="sim-metrics" class="card">
+        <div class="card-title" style="color:var(--green)">Performance Metrics</div>
+        <div class="grid4" id="metrics-grid">
+          <div class="metric-card">
+            <div class="metric-val" id="m-cpu" style="color:var(--cyan)">—</div>
+            <div class="metric-label">CPU Utilization</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-val" id="m-thr" style="color:var(--green)">—</div>
+            <div class="metric-label">Throughput</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-val" id="m-ctx" style="color:var(--amber)">—</div>
+            <div class="metric-label">Context Switches</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-val" id="m-awt" style="color:var(--violet2)">—</div>
+            <div class="metric-label">Avg Wait Time</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-val" id="m-tat" style="color:var(--sky)">—</div>
+            <div class="metric-label">Avg Turnaround</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-val" id="m-rt" style="color:var(--purple)">—</div>
+            <div class="metric-label">Avg Response</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-val" id="m-total" style="color:var(--t2)">—</div>
+            <div class="metric-label">Total Time</div>
+          </div>
+          <div class="metric-card">
+            <div class="metric-val" id="m-completed" style="color:var(--green)">—</div>
+            <div class="metric-label">Completed</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- BOTTOM RIGHT: Results -->
+      <div id="sim-results" class="card" style="overflow:auto">
+
+        <!-- Gantt Chart -->
+        <div class="card-title" style="color:var(--amber)">Gantt Chart</div>
+        <div class="gantt-wrap">
+          <div id="gantt-canvas-wrap">
+            <div class="empty-state" id="gantt-empty">
+              <div class="icon">📊</div>
+              Run a simulation to see the Gantt chart
+            </div>
+          </div>
+        </div>
+
+        <div style="height:1px;background:var(--border);margin:16px 0"></div>
+
+        <!-- Thread Results Table -->
+        <div class="card-title" style="color:var(--violet2)">Thread Results</div>
+        <div style="overflow-x:auto">
+          <table class="results-table" id="results-table">
+            <thead>
+              <tr>
+                <th>Thread</th><th>Arrival</th><th>Burst</th><th>Priority</th>
+                <th>Start</th><th>Completion</th>
+                <th>Wait</th><th>TAT</th><th>Response</th><th>State</th>
+              </tr>
+            </thead>
+            <tbody id="results-tbody">
+              <tr><td colspan="10" class="empty-state">No results yet</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div style="height:1px;background:var(--border);margin:16px 0"></div>
+
+        <!-- Log -->
+        <div class="card-title" style="color:var(--t3)">Event Log</div>
+        <div id="log-list">
+          <div class="empty-state" style="padding:16px">No events yet</div>
+        </div>
+
+      </div>
+    </div><!-- /page-sim -->
+
+    <!-- ────────── PAGE: ANALYSIS ────────── -->
+    <div id="page-analysis" class="page">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <div style="font-size:18px;font-weight:800;color:var(--t1)">Algorithm Comparison</div>
+          <div style="font-size:12px;color:var(--t3);margin-top:3px;font-family:var(--font-mono)">All 4 schedulers on the same thread set</div>
+        </div>
+        <button class="btn btn-primary" onclick="runAnalysis()">⟳ Compare All</button>
+      </div>
+
+      <div class="analysis-grid">
+        <div class="card">
+          <div class="card-title" style="color:var(--cyan)">Waiting Time per Thread</div>
+          <div class="chart-container"><canvas id="chart-wt"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="color:var(--violet2)">Turnaround Time per Thread</div>
+          <div class="chart-container"><canvas id="chart-tat"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="color:var(--green)">Response Time per Thread</div>
+          <div class="chart-container"><canvas id="chart-rt"></canvas></div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="color:var(--amber)">Average Metrics Comparison</div>
+          <div class="chart-container"><canvas id="chart-avg"></canvas></div>
+        </div>
+      </div>
+
+      <!-- Gantt comparison -->
+      <div class="card">
+        <div class="card-title" style="color:var(--t2)">Execution Timelines — All Algorithms</div>
+        <div id="gantt-compare-wrap">
+          <div class="empty-state" id="gantt-compare-empty">
+            <div class="icon">🔄</div>
+            Click "Compare All" to generate timelines
+          </div>
+        </div>
+      </div>
+    </div><!-- /page-analysis -->
+
+    <!-- ────────── PAGE: INSIGHTS ────────── -->
+    <div id="page-insights" class="page">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <div style="font-size:18px;font-weight:800;color:var(--t1)">Intelligent Insights</div>
+          <div style="font-size:12px;color:var(--t3);margin-top:3px;font-family:var(--font-mono)">AI-analyzed scheduling performance report</div>
+        </div>
+        <button class="btn btn-primary" onclick="runInsights()">⟳ Analyze</button>
+      </div>
+
+      <div id="insights-content">
+        <div class="empty-state" style="padding:60px">
+          <div class="icon">🧠</div>
+          Configure threads and click Analyze to generate insights
+        </div>
+      </div>
+    </div><!-- /page-insights -->
+
+  </div><!-- /content -->
+</div><!-- /app -->
+
+<div id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════════════════
+let threads = [];
+let selectedAlgo = 'fcfs';
+let simResult = null;
+let compareResult = null;
+let charts = {};
+let nextTid = 1;
+
+const ALGO_COLORS = {
+  FCFS:     '#00d4ff',
+  RR:       '#9b7df8',
+  SJF:      '#00e5a0',
+  Priority: '#ffb800',
+};
+const THREAD_COLORS = ['#00d4ff','#9b7df8','#00e5a0','#ffb800','#ff4070','#b06aff','#f472b6','#34d399'];
+const threadColor = tid => THREAD_COLORS[(tid - 1) % THREAD_COLORS.length];
+
+// State color map
+const STATE_STYLE = {
+  WAITING:   { bg: 'rgba(74,90,120,0.3)',  fg: '#4a5a78' },
+  READY:     { bg: 'rgba(176,106,255,0.15)', fg: '#b06aff' },
+  RUNNING:   { bg: 'rgba(0,212,255,0.15)', fg: '#00d4ff' },
+  COMPLETED: { bg: 'rgba(0,229,160,0.15)', fg: '#00e5a0' },
+  PAUSED:    { bg: 'rgba(255,184,0,0.15)', fg: '#ffb800' },
+  KILLED:    { bg: 'rgba(255,64,112,0.15)', fg: '#ff4070' },
+};
+const LOG_COLOR = {
+  arrive:   '#40c4ff', run: '#00d4ff', complete: '#00e5a0',
+  preempt:  '#ffb800', kill: '#ff4070', pause: '#ffb800',
+  resume:   '#00e5a0', done: '#00e5a0', info: '#4a5a78', tick: '#262f45',
+};
+
+// ═══════════════════════════════════════════════════════════════
+//  NAVIGATION
+// ═══════════════════════════════════════════════════════════════
+function showPage(name, tabButton) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`page-${name}`).classList.add('active');
+  tabButton.classList.add('active');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  THREAD MANAGEMENT
+// ═══════════════════════════════════════════════════════════════
+function addThread(arrival=0, burst=4, priority=1) {
+  const tid = nextTid++;
+  threads.push({ id: tid, arrival, burst, priority });
+  renderThreadTable();
+}
+
+function removeThread(tid) {
+  threads = threads.filter(t => t.id !== tid);
+  renderThreadTable();
+}
+
+function renderThreadTable() {
+  const tbody = document.getElementById('thread-tbody');
+  if (!threads.length) {
+    tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:16px;color:var(--t4);font-family:var(--font-mono);font-size:11px">No threads — click Add</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = threads.map(t => `
+    <tr>
+      <td><span class="tid-badge" style="background:${threadColor(t.id)}22;color:${threadColor(t.id)}">${t.id}</span></td>
+      <td><input type="number" value="${t.arrival}" min="0" max="99" onchange="updateThread(${t.id},'arrival',this.value)"></td>
+      <td><input type="number" value="${t.burst}"   min="1" max="99" onchange="updateThread(${t.id},'burst',this.value)"></td>
+      <td><input type="number" value="${t.priority}" min="1" max="10" onchange="updateThread(${t.id},'priority',this.value)"></td>
+      <td><button class="remove-thread-btn" onclick="removeThread(${t.id})">×</button></td>
+    </tr>
+  `).join('');
+}
+
+function updateThread(tid, field, value) {
+  const t = threads.find(t => t.id === tid);
+  if (t) t[field] = parseInt(value) || 0;
+}
+
+function loadPreset(name) {
+  threads = [];
+  nextTid = 1;
+  const presets = {
+    default: [
+      {arrival:0, burst:6, priority:2},
+      {arrival:2, burst:4, priority:1},
+      {arrival:4, burst:2, priority:3},
+      {arrival:6, burst:5, priority:2},
+    ],
+    stress: [
+      {arrival:0, burst:8, priority:3},
+      {arrival:0, burst:3, priority:1},
+      {arrival:1, burst:5, priority:2},
+      {arrival:2, burst:1, priority:1},
+      {arrival:3, burst:6, priority:4},
+      {arrival:5, burst:2, priority:2},
+    ],
+    priority: [
+      {arrival:0, burst:6, priority:3},
+      {arrival:0, burst:4, priority:1},
+      {arrival:1, burst:3, priority:5},
+      {arrival:2, burst:5, priority:2},
+    ],
+  };
+  presets[name].forEach(cfg => addThread(cfg.arrival, cfg.burst, cfg.priority));
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ALGO SELECTION
+// ═══════════════════════════════════════════════════════════════
+function selectAlgo(btn) {
+  document.querySelectorAll('.algo-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedAlgo = btn.dataset.algo;
+  document.getElementById('quantum-row').style.display = selectedAlgo === 'rr' ? 'block' : 'none';
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  API CALLS
+// ═══════════════════════════════════════════════════════════════
+async function apiFetch(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(body)
+  });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Server error');
+  return data;
+}
+
+function getPayload() {
+  const syncedThreads = [];
+  const rows = document.querySelectorAll('#thread-tbody tr');
+  rows.forEach((row, i) => {
+    const inputs = row.querySelectorAll('input[type=number]');
+    if (inputs.length === 3 && threads[i]) {
+      syncedThreads.push({
+        id: threads[i].id,
+        arrival:  parseInt(inputs[0].value) || 0,
+        burst:    parseInt(inputs[1].value) || 1,
+        priority: parseInt(inputs[2].value) || 1,
+      });
+    }
+  });
+  return {
+    threads: syncedThreads.length ? syncedThreads : threads,
+    algorithm: selectedAlgo,
+    quantum: parseInt(document.getElementById('quantum-input').value) || 2,
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  SIMULATE
+// ═══════════════════════════════════════════════════════════════
+async function runSimulation() {
+  if (!threads.length) { showToast('Add at least one thread', true); return; }
+  const btn = document.getElementById('run-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Running…';
+  setStatus('running');
+
+  try {
+    const payload = getPayload();
+    const data = await apiFetch('/simulate', payload);
+    simResult = data;
+    renderSimResults(data);
+    setStatus('ready');
+    showToast(`✓ ${data.algorithm} completed in ${data.metrics.total_time} ticks`);
+  } catch(e) {
+    showToast(e.message, true);
+    setStatus('idle');
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '▶ Run Simulation';
+  }
+}
+
+function renderSimResults(data) {
+  const m = data.metrics;
+  document.getElementById('m-cpu').textContent      = m.cpu_utilization + '%';
+  document.getElementById('m-thr').textContent      = m.throughput;
+  document.getElementById('m-ctx').textContent      = m.context_switches;
+  document.getElementById('m-awt').textContent      = m.avg_waiting_time;
+  document.getElementById('m-tat').textContent      = m.avg_turnaround_time;
+  document.getElementById('m-rt').textContent       = m.avg_response_time;
+  document.getElementById('m-total').textContent    = m.total_time + ' ticks';
+  document.getElementById('m-completed').textContent = m.threads_completed;
+
+  renderGanttSVG('gantt-canvas-wrap', data.gantt, data.metrics.total_time);
+  renderResultsTable(data.threads);
+  renderLog(data.logs);
+}
+
+function clearResults() {
+  document.getElementById('m-cpu').textContent = '—';
+  document.getElementById('m-thr').textContent = '—';
+  document.getElementById('m-ctx').textContent = '—';
+  document.getElementById('m-awt').textContent = '—';
+  document.getElementById('m-tat').textContent = '—';
+  document.getElementById('m-rt').textContent  = '—';
+  document.getElementById('m-total').textContent = '—';
+  document.getElementById('m-completed').textContent = '—';
+  document.getElementById('gantt-canvas-wrap').innerHTML =
+    `<div class="empty-state" id="gantt-empty"><div class="icon">📊</div>Run a simulation to see the Gantt chart</div>`;
+  document.getElementById('results-tbody').innerHTML =
+    `<tr><td colspan="10" class="empty-state">No results yet</td></tr>`;
+  document.getElementById('log-list').innerHTML =
+    `<div class="empty-state" style="padding:16px">No events yet</div>`;
+  simResult = null;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  GANTT SVG RENDERER
+// ═══════════════════════════════════════════════════════════════
+function renderGanttSVG(containerId, gantt, totalTime, rowLabel=null) {
+  const container = document.getElementById(containerId);
+  if (!gantt || !gantt.length) {
+    container.innerHTML = `<div class="empty-state">No Gantt data</div>`;
+    return;
+  }
+  const PX_PER_TICK = 36;
+  const ROW_H = 36;
+  const TICK_H = 22;
+  const LABEL_W = rowLabel ? 80 : 0;
+  const PADDING = 10;
+  const W = Math.max(600, (totalTime + 1) * PX_PER_TICK) + LABEL_W + PADDING * 2;
+  const H = ROW_H + TICK_H + 16;
+
+  let svg = `<svg class="gantt-svg" width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg">`;
+
+  // background
+  svg += `<rect width="${W}" height="${H}" fill="#0f1320" rx="8"/>`;
+
+  // draw segments
+  for (const seg of gantt) {
+    const x = LABEL_W + PADDING + seg.start * PX_PER_TICK;
+    const w = Math.max(seg.duration * PX_PER_TICK - 1, 2);
+    const y = 8;
+    if (seg.tid === 0) {
+      svg += `<rect x="${x}" y="${y}" width="${w}" height="${ROW_H}" rx="4" fill="#1a2035" stroke="#1e2840" stroke-width="1"/>`;
+      svg += `<text x="${x + w/2}" y="${y + ROW_H/2 + 4}" text-anchor="middle" fill="#2a3550" font-size="10" font-family="JetBrains Mono">IDLE</text>`;
+    } else {
+      const c = threadColor(seg.tid);
+      svg += `<rect x="${x}" y="${y}" width="${w}" height="${ROW_H}" rx="4" fill="${c}22" stroke="${c}66" stroke-width="1"/>`;
+      if (seg.duration * PX_PER_TICK > 20) {
+        svg += `<text x="${x + w/2}" y="${y + ROW_H/2 + 4}" text-anchor="middle" fill="${c}" font-size="11" font-weight="700" font-family="JetBrains Mono">T${seg.tid}</text>`;
+      }
+    }
+  }
+
+  // tick labels
+  const tickStep = totalTime > 40 ? 5 : totalTime > 20 ? 2 : 1;
+  for (let t = 0; t <= totalTime; t += tickStep) {
+    const x = LABEL_W + PADDING + t * PX_PER_TICK;
+    svg += `<line x1="${x}" y1="${8 + ROW_H}" x2="${x}" y2="${8 + ROW_H + 6}" stroke="#2a3550" stroke-width="1"/>`;
+    svg += `<text x="${x}" y="${8 + ROW_H + 18}" text-anchor="middle" fill="#4a5a78" font-size="9" font-family="JetBrains Mono">${t}</text>`;
+  }
+  // baseline
+  svg += `<line x1="${LABEL_W + PADDING}" y1="${8 + ROW_H}" x2="${W - PADDING}" y2="${8 + ROW_H}" stroke="#1e2840" stroke-width="1"/>`;
+
+  if (rowLabel) {
+    svg += `<text x="${LABEL_W - 8}" y="${8 + ROW_H/2 + 4}" text-anchor="end" fill="#4a5a78" font-size="11" font-weight="700" font-family="Syne">${rowLabel}</text>`;
+  }
+
+  svg += `</svg>`;
+  container.innerHTML = svg;
+}
+
+function renderCompareGantt(compareData) {
+  const wrap = document.getElementById('gantt-compare-wrap');
+  const algos = Object.keys(compareData);
+  let html = '';
+  for (const algo of algos) {
+    const { gantt, metrics } = compareData[algo];
+    const totalTime = metrics.total_time;
+    const PX_PER_TICK = 28;
+    const ROW_H = 28;
+    const TICK_H = 20;
+    const LABEL_W = 90;
+    const PADDING = 8;
+    const W = Math.max(500, (totalTime + 1) * PX_PER_TICK) + LABEL_W + PADDING * 2;
+    const H = ROW_H + TICK_H + 10;
+    const c = ALGO_COLORS[algo];
+
+    let svg = `<svg width="${W}" height="${H}" xmlns="http://www.w3.org/2000/svg" style="display:block;min-width:100%">`;
+    svg += `<rect width="${W}" height="${H}" fill="#0a0d16"/>`;
+    svg += `<text x="0" y="${8 + ROW_H/2 + 4}" fill="${c}" font-size="12" font-weight="700" font-family="Syne">${algo}</text>`;
+
+    for (const seg of gantt) {
+      const x = LABEL_W + PADDING + seg.start * PX_PER_TICK;
+      const w = Math.max(seg.duration * PX_PER_TICK - 1, 2);
+      const y = 4;
+      if (seg.tid === 0) {
+        svg += `<rect x="${x}" y="${y}" width="${w}" height="${ROW_H}" rx="3" fill="#1a2035" stroke="#1e2840" stroke-width="1"/>`;
+      } else {
+        const tc = threadColor(seg.tid);
+        svg += `<rect x="${x}" y="${y}" width="${w}" height="${ROW_H}" rx="3" fill="${tc}22" stroke="${tc}55" stroke-width="1"/>`;
+        if (seg.duration * PX_PER_TICK > 18) {
+          svg += `<text x="${x + w/2}" y="${y + ROW_H/2 + 4}" text-anchor="middle" fill="${tc}" font-size="9" font-weight="700" font-family="JetBrains Mono">T${seg.tid}</text>`;
+        }
+      }
+    }
+    const tickStep = totalTime > 40 ? 5 : totalTime > 20 ? 2 : 1;
+    for (let t = 0; t <= totalTime; t += tickStep) {
+      const x = LABEL_W + PADDING + t * PX_PER_TICK;
+      svg += `<line x1="${x}" y1="${4 + ROW_H}" x2="${x}" y2="${4 + ROW_H + 5}" stroke="#1e2840" stroke-width="1"/>`;
+      svg += `<text x="${x}" y="${4 + ROW_H + 16}" text-anchor="middle" fill="#2a3550" font-size="8" font-family="JetBrains Mono">${t}</text>`;
+    }
+    svg += `<line x1="${LABEL_W + PADDING}" y1="${4 + ROW_H}" x2="${W - PADDING}" y2="${4 + ROW_H}" stroke="#1e2840" stroke-width="1"/>`;
+    svg += `</svg>`;
+    html += `<div style="margin-bottom:6px;overflow-x:auto">${svg}</div>`;
+  }
+  wrap.innerHTML = html;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  RESULTS TABLE
+// ═══════════════════════════════════════════════════════════════
+function renderResultsTable(threadData) {
+  const tbody = document.getElementById('results-tbody');
+  tbody.innerHTML = threadData.map(t => {
+    const s = STATE_STYLE[t.state] || STATE_STYLE.WAITING;
+    const c = threadColor(t.id);
+    return `<tr>
+      <td><span style="color:${c};font-weight:700">T${t.id}</span></td>
+      <td>${t.arrival}</td>
+      <td>${t.burst}</td>
+      <td>${t.priority}</td>
+      <td>${t.start_time ?? '—'}</td>
+      <td>${t.completion_time ?? '—'}</td>
+      <td style="color:var(--amber)">${t.waiting_time ?? '—'}</td>
+      <td style="color:var(--sky)">${t.turnaround_time ?? '—'}</td>
+      <td style="color:var(--purple)">${t.response_time ?? '—'}</td>
+      <td><span class="state-badge" style="background:${s.bg};color:${s.fg}">${t.state}</span></td>
+    </tr>`;
+  }).join('');
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  LOG
+// ═══════════════════════════════════════════════════════════════
+function renderLog(logs) {
+  const container = document.getElementById('log-list');
+  if (!logs || !logs.length) {
+    container.innerHTML = `<div class="empty-state" style="padding:16px">No events</div>`;
+    return;
+  }
+  // Build compact event log from logs
+  const events = [];
+  let lastCpu = null;
+  for (const log of logs) {
+    for (const arr of (log.arrivals || [])) {
+      events.push({ tick: log.time, msg: `${arr} arrived`, tag: 'arrive' });
+    }
+    if (log.cpu.running !== lastCpu) {
+      if (log.cpu.running === 'IDLE') {
+        events.push({ tick: log.time, msg: `CPU idle`, tag: 'info' });
+      } else {
+        events.push({ tick: log.time, msg: `${log.cpu.running} → CPU  rem=${log.cpu.remaining}`, tag: 'run' });
+      }
+      lastCpu = log.cpu.running;
+    }
+    for (const comp of (log.completed || [])) {
+      events.push({ tick: log.time, msg: `${comp} completed`, tag: 'complete' });
+    }
+  }
+  container.innerHTML = events.map(e => `
+    <div class="log-line">
+      <span class="log-tick">t=${e.tick}</span>
+      <span class="log-msg" style="color:${LOG_COLOR[e.tag] || '#4a5a78'}">${e.msg}</span>
+    </div>
+  `).join('');
+  container.scrollTop = container.scrollHeight;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  ANALYSIS
+// ═══════════════════════════════════════════════════════════════
+async function runAnalysis() {
+  if (!threads.length) { showToast('Add threads first', true); return; }
+  setStatus('running');
+  try {
+    const payload = getPayload();
+    const data = await apiFetch('/compare', payload);
+    compareResult = data;
+    renderAnalysisCharts(data);
+    renderCompareGantt(data);
+    document.getElementById('gantt-compare-empty') && document.getElementById('gantt-compare-empty').remove();
+    setStatus('ready');
+    showToast('✓ Comparison complete');
+  } catch(e) {
+    showToast(e.message, true);
+    setStatus('idle');
+  }
+}
+
+function destroyChart(id) {
+  if (charts[id]) { charts[id].destroy(); delete charts[id]; }
+}
+
+function renderAnalysisCharts(data) {
+  const algos   = Object.keys(data);               // ["FCFS","RR","SJF","Priority"]
+  const colors  = algos.map(a => ALGO_COLORS[a]);
+  const nThread = data[algos[0]].threads.length;
+  const labels  = data[algos[0]].threads.map(t => `T${t.id}`);
+
+  const chartCfg = (title, datasets, yLabel='Ticks') => ({
+    type: 'bar',
+    data: { labels, datasets },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, labels: { color: '#8a9bb8', font: { family: 'JetBrains Mono', size: 11 }, boxWidth: 10 } },
+        tooltip: { backgroundColor: '#141929', titleColor: '#e8edf5', bodyColor: '#8a9bb8', borderColor: '#2a3550', borderWidth: 1 },
+      },
+      scales: {
+        x: { ticks: { color: '#8a9bb8', font: { family: 'JetBrains Mono', size: 10 } }, grid: { color: '#1e2840' } },
+        y: { ticks: { color: '#8a9bb8', font: { family: 'JetBrains Mono', size: 10 } }, grid: { color: '#1e2840' }, title: { display: true, text: yLabel, color: '#4a5a78', font: { size: 10 } } },
+      },
+    },
+  });
+
+  // Waiting Time
+  destroyChart('wt');
+  charts['wt'] = new Chart(document.getElementById('chart-wt'), chartCfg('Waiting Time',
+    algos.map((a, i) => ({
+      label: a,
+      data:  data[a].threads.map(t => t.waiting_time ?? 0),
+      backgroundColor: ALGO_COLORS[a] + '55',
+      borderColor:     ALGO_COLORS[a],
+      borderWidth: 1.5,
+      borderRadius: 4,
+    }))
+  ));
+
+  // Turnaround Time
+  destroyChart('tat');
+  charts['tat'] = new Chart(document.getElementById('chart-tat'), chartCfg('Turnaround Time',
+    algos.map((a, i) => ({
+      label: a,
+      data:  data[a].threads.map(t => t.turnaround_time ?? 0),
+      backgroundColor: ALGO_COLORS[a] + '55',
+      borderColor:     ALGO_COLORS[a],
+      borderWidth: 1.5,
+      borderRadius: 4,
+    }))
+  ));
+
+  // Response Time
+  destroyChart('rt');
+  charts['rt'] = new Chart(document.getElementById('chart-rt'), chartCfg('Response Time',
+    algos.map((a, i) => ({
+      label: a,
+      data:  data[a].threads.map(t => t.response_time ?? 0),
+      backgroundColor: ALGO_COLORS[a] + '55',
+      borderColor:     ALGO_COLORS[a],
+      borderWidth: 1.5,
+      borderRadius: 4,
+    }))
+  ));
+
+  // Average Metrics
+  destroyChart('avg');
+  charts['avg'] = new Chart(document.getElementById('chart-avg'), {
+    type: 'bar',
+    data: {
+      labels: ['Avg Wait', 'Avg TAT', 'Avg Response'],
+      datasets: algos.map(a => ({
+        label: a,
+        data: [
+          data[a].metrics.avg_waiting_time,
+          data[a].metrics.avg_turnaround_time,
+          data[a].metrics.avg_response_time,
+        ],
+        backgroundColor: ALGO_COLORS[a] + '55',
+        borderColor:     ALGO_COLORS[a],
+        borderWidth: 1.5,
+        borderRadius: 4,
+      })),
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true, labels: { color: '#8a9bb8', font: { family: 'JetBrains Mono', size: 11 }, boxWidth: 10 } },
+        tooltip: { backgroundColor: '#141929', titleColor: '#e8edf5', bodyColor: '#8a9bb8', borderColor: '#2a3550', borderWidth: 1 },
+      },
+      scales: {
+        x: { ticks: { color: '#8a9bb8', font: { family: 'JetBrains Mono', size: 10 } }, grid: { color: '#1e2840' } },
+        y: { ticks: { color: '#8a9bb8', font: { family: 'JetBrains Mono', size: 10 } }, grid: { color: '#1e2840' } },
+      },
+    },
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  INSIGHTS
+// ═══════════════════════════════════════════════════════════════
+async function runInsights() {
+  if (!threads.length) { showToast('Add threads first', true); return; }
+  setStatus('running');
+  const container = document.getElementById('insights-content');
+  container.innerHTML = `<div class="empty-state" style="padding:60px"><div class="spinner"></div><div style="margin-top:14px">Analyzing all algorithms…</div></div>`;
+
+  try {
+    const payload = getPayload();
+    const data = await apiFetch('/insights', payload);
+    renderInsights(data);
+    setStatus('ready');
+  } catch(e) {
+    showToast(e.message, true);
+    setStatus('idle');
+    container.innerHTML = `<div class="empty-state" style="padding:60px;color:var(--rose)">${e.message}</div>`;
+  }
+}
+
+function renderInsights(data) {
+  const container = document.getElementById('insights-content');
+  const best = data.best_algorithm;
+  const bestColor = ALGO_COLORS[best] || '#00d4ff';
+  const rankColors = ['gold', 'silver', 'bronze', ''];
+
+  // Build insights text with markdown-like bold
+  const insightHtml = data.insights.map(txt =>
+    `<div class="insight-item">${txt.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>')}</div>`
+  ).join('');
+
+  // Ranking table
+  const rankHtml = data.ranking.map((r, i) => {
+    const c = ALGO_COLORS[r.algorithm] || '#4a5a78';
+    const rankClass = rankColors[i] || '';
+    return `<tr>
+      <td><span class="rank-num ${rankClass}">#${r.rank}</span></td>
+      <td><span style="color:${c};font-weight:700">${r.algorithm}</span></td>
+      <td style="color:var(--amber)">${r.avg_waiting_time}</td>
+      <td style="color:var(--sky)">${r.avg_turnaround_time}</td>
+      <td style="color:var(--green)">${r.cpu_utilization}%</td>
+    </tr>`;
+  }).join('');
+
+  container.innerHTML = `
+    <!-- HERO -->
+    <div class="insights-hero">
+      <div class="best-algo-badge">
+        <div class="badge-label">BEST</div>
+        <div class="badge-name">${best}</div>
+      </div>
+      <div class="insights-text">
+        <h2>${best} wins this workload</h2>
+        <p>${data.insights[0] ? data.insights[0].replace(/\*\*(.*?)\*\*/g,'<b>$1</b>') : ''}</p>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-bottom:16px">
+      <!-- RANKING -->
+      <div class="card">
+        <div class="card-title" style="color:var(--amber)">Algorithm Ranking</div>
+        <table class="ranking-table">
+          <thead>
+            <tr style="font-size:10px;color:var(--t3)">
+              <td style="padding:6px 14px">RANK</td>
+              <td>ALGO</td>
+              <td>AVG WAIT</td>
+              <td>AVG TAT</td>
+              <td>CPU UTIL</td>
+            </tr>
+          </thead>
+          <tbody>${rankHtml}</tbody>
+        </table>
+      </div>
+
+      <!-- INSIGHTS -->
+      <div class="card">
+        <div class="card-title" style="color:var(--violet2)">Key Findings</div>
+        ${insightHtml}
+      </div>
+    </div>
+
+    <!-- RECOMMENDATION -->
+    <div class="rec-box">
+      <div class="rec-icon">💡</div>
+      <div class="rec-text">
+        <strong>Recommendation:</strong> ${data.recommendation}
+      </div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  UTILITY
+// ═══════════════════════════════════════════════════════════════
+function setStatus(s) {
+  const dot  = document.getElementById('status-dot');
+  const text = document.getElementById('status-text');
+  dot.className = 'status-dot ' + s;
+  text.textContent = s;
+}
+
+function showToast(msg, isError=false) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'show' + (isError ? ' error' : '');
+  setTimeout(() => t.className = '', 3000);
+}
+
+// ═══════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════
+loadPreset('default');
+</script>
+</body>
+</html>
